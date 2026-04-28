@@ -17,7 +17,7 @@
   "llmScreening": {
     "provider": "minimax",
     "configPath": "automation/minimax.config.json",
-    "batchSize": 20,
+    "batchSize": 10,
     "cachePath": "data/paper-screening-cache.json",
     "pushHistoryPath": "data/paper-push-history.json",
     "minLlmScore": 6
@@ -29,15 +29,15 @@
     },
     {
       "name": "transport_emergency_resilience",
-      "query": "((transportation resilience) OR (public transport disruption) OR (transit disruption) OR (emergency transportation) OR (disruption management)) AND ((public transport) OR (transit) OR (bus) OR (multimodal) OR (shared mobility)) AND ((optimization) OR (scheduling) OR (planning) OR (routing) OR (resource allocation))"
+      "query": "((transportation resilience) OR (public transport resilience) OR (public transport disruption) OR (transit disruption) OR (service disruption) OR (emergency transportation) OR (disruption management) OR (service recovery) OR (service restoration)) AND ((public transport) OR (public transit) OR (transit) OR (bus) OR (metro) OR (rail transit) OR (multimodal transport)) AND ((optimization) OR (scheduling) OR (rescheduling) OR (planning) OR (routing) OR (dispatching) OR (network design) OR (timetabling))"
     },
     {
       "name": "or_ai",
-      "query": "((decision-focused learning) OR (learning to optimize) OR (machine learning for optimization) OR (learning-augmented optimization)) AND ((mixed integer programming) OR (combinatorial optimization) OR (stochastic programming) OR (Benders decomposition) OR (operations research))"
+      "query": "((learning to optimize) OR (machine learning for optimization) OR (large language model*) OR (learning-augmented optimization) OR (ML-guided optimization) OR (learning to branch) OR (learning to cut) OR (learning to heuristics)) AND ((mixed integer programming) OR (integer programming) OR (combinatorial optimization) OR (branch-and-bound) OR (branch-and-cut) OR (cutting plane) OR (Benders decomposition) OR (decomposition algorithm))"
     },
     {
       "name": "ai_behavior",
-      "query": "((machine learning) OR (artificial intelligence) OR (large language model*) OR (deep learning)) AND ((travel behavior) OR (traveler behavior) OR (choice modeling) OR (mode choice) OR (discrete choice) OR (passenger behavior)) AND ((transportation) OR (mobility) OR (airport) OR (transit))"
+      "query": "((machine learning) OR (artificial intelligence) OR (deep learning) OR (large language model*) OR (explainable artificial intelligence) OR (interpretable machine learning)) AND ((travel behavior) OR (traveler behavior) OR (choice modeling) OR (mode choice) OR (discrete choice) OR (passenger behavior) OR (travel decision)) AND ((transportation) OR (mobility) OR (airport) OR (transit))"
     }
   ],
   "topJournals": [
@@ -58,8 +58,6 @@
     "Transportation Research Part E: Logistics and Transportation Review",
     "Transportation Research Part F: Traffic Psychology and Behaviour",
     "Transport Policy",
-    "Applied Energy",
-    "Energy",
     "Nature Energy"
   ],
   "task": {
