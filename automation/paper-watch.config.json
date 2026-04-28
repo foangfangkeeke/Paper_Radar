@@ -33,7 +33,7 @@
     },
     {
       "name": "or_ai",
-      "query": "(\"predict-then-optimize\" OR \"decision-focused learning\" OR \"learning to optimize\" OR \"machine learning for optimization\" OR \"learning-augmented optimization\") AND (\"mixed integer programming\" OR \"combinatorial optimization\" OR \"stochastic programming\" OR \"Benders decomposition\" OR \"operations research\")"
+      "query": "(\"decision-focused learning\" OR \"learning to optimize\" OR \"machine learning for optimization\" OR \"learning-augmented optimization\") AND (\"mixed integer programming\" OR \"combinatorial optimization\" OR \"stochastic programming\" OR \"Benders decomposition\" OR \"operations research\")"
     },
     {
       "name": "ai_behavior",
