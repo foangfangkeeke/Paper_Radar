@@ -1,0 +1,7 @@
+automation/zotero.config.json
+automation/wos.config.json
+automation/minimax.config.json
+automation/minimax.config*.json
+data/browser_profiles/
+data/
+reports/
