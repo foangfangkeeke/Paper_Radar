@@ -544,37 +544,39 @@ def save_outputs(
     push_queue: list[dict[str, Any]],
     processed_count: int,
     total_to_screen: int,
+    write_legacy: bool = True,
 ) -> None:
     base_queue_sorted = sorted(base_queue, key=lambda x: (str(x.get("screened_at") or ""), str(x.get("key") or "")), reverse=True)
     push_queue_sorted = sorted(push_queue, key=lambda x: (int(x.get("score", 0)), str(x.get("screened_at") or "")), reverse=True)
     runner.write_json(base_path, base_queue_sorted)
     runner.write_json(push_path, push_queue_sorted)
 
-    legacy_queue = [to_legacy_queue_record(item) for item in push_queue_sorted]
-    runner.write_json(legacy_queue_path, legacy_queue)
-    runner.write_json(
-        legacy_cache_path,
-        {
-            "generatedAt": dt.datetime.now().astimezone().isoformat(),
-            "papers": [
-                {
-                    "Key": item["key"],
-                    "Title": item["TI"],
-                    "Journal": item["SO"],
-                    "Accepted": bool(item.get("accepted")),
-                    "RecommendationScore": int(item.get("score", 0)),
-                    "LlmScore": int(item.get("score", 0)),
-                    "Tags": item.get("tags", {}),
-                    "Comment": item.get("comment", ""),
-                    "ScreenSchemaVersion": SCREEN_SCHEMA_VERSION,
-                    "ScreenedAt": item.get("screened_at"),
-                    "Mode": "ScreenItems",
-                    "Source": "wos_merged",
-                }
-                for item in base_queue_sorted
-            ],
-        },
-    )
+    if write_legacy:
+        legacy_queue = [to_legacy_queue_record(item) for item in push_queue_sorted]
+        runner.write_json(legacy_queue_path, legacy_queue)
+        runner.write_json(
+            legacy_cache_path,
+            {
+                "generatedAt": dt.datetime.now().astimezone().isoformat(),
+                "papers": [
+                    {
+                        "Key": item["key"],
+                        "Title": item["TI"],
+                        "Journal": item["SO"],
+                        "Accepted": bool(item.get("accepted")),
+                        "RecommendationScore": int(item.get("score", 0)),
+                        "LlmScore": int(item.get("score", 0)),
+                        "Tags": item.get("tags", {}),
+                        "Comment": item.get("comment", ""),
+                        "ScreenSchemaVersion": SCREEN_SCHEMA_VERSION,
+                        "ScreenedAt": item.get("screened_at"),
+                        "Mode": "ScreenItems",
+                        "Source": "wos_merged",
+                    }
+                    for item in base_queue_sorted
+                ],
+            },
+        )
     runner.write_json(
         state_path,
         {
@@ -604,6 +606,8 @@ def screen_items(
     min_push_score: int | None,
     limit: int,
     dry_run: bool,
+    rebuild_push: bool = False,
+    write_legacy: bool = True,
 ) -> None:
     runner = Runner(workspace)
     config = runner.read_json(watch_config_path, {})
@@ -623,6 +627,31 @@ def screen_items(
     push_queue = runner.read_json(push_path, [])
     if not isinstance(push_queue, list):
         push_queue = []
+
+    if rebuild_push:
+        rebuilt_push = [
+            dict(item, in_push_queue=True, status=(item.get("status") if item.get("status") in {"pending", "pushed", "skipped", "archived"} else "pending"))
+            for item in base_queue
+            if bool(item.get("accepted")) and int(item.get("score", 0) or 0) >= int(min_push_score)
+        ]
+        save_outputs(
+            runner,
+            base_path,
+            push_path,
+            legacy_queue_path,
+            legacy_cache_path,
+            state_path,
+            base_queue,
+            rebuilt_push,
+            processed_count=0,
+            total_to_screen=0,
+            write_legacy=write_legacy,
+        )
+        runner.log(
+            f"Push queue rebuilt | baseQueue={len(base_queue)}; pushQueue={len(rebuilt_push)}; "
+            f"minPushScore={min_push_score}; legacy={write_legacy}"
+        )
+        return
 
     screened_keys = {str(item.get("key") or item.get("Key") or "") for item in base_queue}
     screened_keys.discard("")
@@ -676,6 +705,7 @@ def screen_items(
             push_queue,
             processed,
             len(to_screen),
+            write_legacy=write_legacy,
         )
         runner.log(
             f"Batch saved | batch={batch_no}/{total_batches}; acceptedForPush={len(new_push)}/{len(batch)}; "
@@ -705,6 +735,8 @@ def main() -> None:
     parser.add_argument("--min-push-score", type=int, default=None)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--rebuild-push", action="store_true", help="Rebuild paper_push_queue.json from paper_base_queue.json without calling MiniMax.")
+    parser.add_argument("--no-legacy", action="store_true", help="Do not write old compatibility files paper-candidate-queue/cache/state outputs.")
     args = parser.parse_args()
 
     workspace = Path(args.workspace).resolve()
@@ -721,6 +753,8 @@ def main() -> None:
         min_push_score=args.min_push_score,
         limit=args.limit,
         dry_run=bool(args.dry_run),
+        rebuild_push=bool(args.rebuild_push),
+        write_legacy=not bool(args.no_legacy),
     )
 
 

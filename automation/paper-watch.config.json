@@ -25,19 +25,19 @@
   "keywords": [
     {
       "name": "transport_energy_integration",
-      "query": "(\"electric vehicle*\" OR \"electric bus*\" OR \"battery electric bus*\" OR \"charging infrastructure\" OR \"wireless charging\") AND (\"power grid\" OR \"smart grid\" OR \"demand response\" OR \"energy system*\" OR \"renewable energy\") AND (\"optimization\" OR \"planning\" OR \"scheduling\" OR \"operation*\")"
+      "query": "((electric vehicle*) OR (electric bus*) OR (battery electric bus*) OR (charging infrastructure) OR (wireless charging)) AND ((power grid) OR (smart grid) OR (demand response) OR (energy system*) OR (renewable energy)) AND ((optimization) OR (planning) OR (scheduling) OR (operation))"
     },
     {
       "name": "transport_emergency_resilience",
-      "query": "(\"transportation resilience\" OR \"public transport disruption\" OR \"transit disruption\" OR \"emergency transportation\" OR \"disruption management\") AND (\"public transport\" OR \"transit\" OR \"bus\" OR \"multimodal\" OR \"shared mobility\") AND (\"optimization\" OR \"scheduling\" OR \"planning\" OR \"routing\" OR \"resource allocation\")"
+      "query": "((transportation resilience) OR (public transport disruption) OR (transit disruption) OR (emergency transportation) OR (disruption management)) AND ((public transport) OR (transit) OR (bus) OR (multimodal) OR (shared mobility)) AND ((optimization) OR (scheduling) OR (planning) OR (routing) OR (resource allocation))"
     },
     {
       "name": "or_ai",
-      "query": "(\"decision-focused learning\" OR \"learning to optimize\" OR \"machine learning for optimization\" OR \"learning-augmented optimization\") AND (\"mixed integer programming\" OR \"combinatorial optimization\" OR \"stochastic programming\" OR \"Benders decomposition\" OR \"operations research\")"
+      "query": "((decision-focused learning) OR (learning to optimize) OR (machine learning for optimization) OR (learning-augmented optimization)) AND ((mixed integer programming) OR (combinatorial optimization) OR (stochastic programming) OR (Benders decomposition) OR (operations research))"
     },
     {
       "name": "ai_behavior",
-      "query": "(\"machine learning\" OR \"artificial intelligence\" OR \"large language model*\" OR \"deep learning\") AND (\"travel behavior\" OR \"traveler behavior\" OR \"choice modeling\" OR \"mode choice\" OR \"discrete choice\" OR \"passenger behavior\") AND (\"transportation\" OR \"mobility\" OR \"airport\" OR \"transit\")"
+      "query": "((machine learning) OR (artificial intelligence) OR (large language model*) OR (deep learning)) AND ((travel behavior) OR (traveler behavior) OR (choice modeling) OR (mode choice) OR (discrete choice) OR (passenger behavior)) AND ((transportation) OR (mobility) OR (airport) OR (transit))"
     }
   ],
   "topJournals": [
