@@ -7,7 +7,6 @@ import argparse
 import datetime as dt
 from pathlib import Path
 
-from abstract_enrichment_tool import enrich_abstract_items
 from crossref_fallback_tool import fetch_crossref_fallback_exports
 from merge_exports import merge_wos_exports
 from minimax_screening_tool import screen_papers_to_queues
@@ -29,6 +28,10 @@ def parse_args() -> argparse.Namespace:
 
 def parse_date(value: str) -> dt.date:
     return dt.date.fromisoformat(str(value)[:10])
+
+
+def has_abstract(item: dict) -> bool:
+    return bool(str(item.get("AB") or item.get("Abstract") or "").strip())
 
 
 def main() -> None:
@@ -93,14 +96,13 @@ def main() -> None:
         f"imported={stats.get('imported_records')}; deduped={len(items)}"
     )
 
-    enriched_items = enrich_abstract_items(
-        items=items,
-        workspace=workspace,
-        log=log,
-    )
+    items_with_abstract = [item for item in items if has_abstract(item)]
+    skipped_no_abstract = len(items) - len(items_with_abstract)
+    if skipped_no_abstract:
+        log(f"Skipped papers without abstract | skipped={skipped_no_abstract}; keptForMiniMax={len(items_with_abstract)}")
 
     queue = screen_papers_to_queues(
-        papers=enriched_items,
+        papers=items_with_abstract,
         workspace=workspace,
         min_push_score=args.min_push_score,
         log=log,

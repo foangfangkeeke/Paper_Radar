@@ -776,7 +776,12 @@ def screen_papers_to_queues(
     screened_identities = {identity for item in base_queue if isinstance(item, dict) for identity in paper_identities(item)}
     screened_identities.discard("")
 
-    deduped = merge_by_identity([paper for paper in papers if paper.get("Key")])
+    with_abstract = [paper for paper in papers if paper.get("Key") and paper_abstract(paper)]
+    skipped_no_abstract = len([paper for paper in papers if paper.get("Key")]) - len(with_abstract)
+    if skipped_no_abstract:
+        log(f"Skipped papers without abstract before MiniMax | skipped={skipped_no_abstract}")
+
+    deduped = merge_by_identity(with_abstract)
     to_screen = [paper for paper in deduped if not any(identity in screened_identities for identity in paper_identities(paper))]
     log(
         f"MiniMax screening start | input={len(papers)}; deduped={len(deduped)}; "

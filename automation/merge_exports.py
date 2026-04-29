@@ -15,7 +15,7 @@ Main output:
   data/wos_minimax_items.json
 
 Each output item contains:
-  key, TI, SO, AB, DI, PY, UT when available
+  Key, TI, SO, AB
 """
 
 from __future__ import annotations
@@ -102,12 +102,7 @@ def record_to_minimax_item(raw: dict[str, str]) -> dict[str, str] | None:
     else:
         key = "title:" + normalize_title(title)
 
-    item = {"key": key, "TI": title, "SO": journal, "AB": abstract}
-    for tag in ("DI", "PY", "UT"):
-        value = clean_text(raw.get(tag))
-        if value:
-            item[tag] = value
-    return item
+    return {"Key": key, "TI": title, "SO": journal, "AB": abstract}
 
 
 def is_inside_archive(path: Path) -> bool:
@@ -152,7 +147,7 @@ def merge_wos_exports(input_dirs: list[Path]) -> tuple[list[dict[str, str]], dic
                 skipped += 1
                 continue
 
-            key = item["key"]
+            key = item["Key"]
             existing = merged.get(key)
             if existing is None:
                 merged[key] = item
@@ -237,7 +232,6 @@ def main() -> None:
     )
     parser.add_argument("--input", action="append", default=[], help="Input folder or txt file. Can be repeated.")
     parser.add_argument("--out-json", default="data/wos_minimax_items.json", help="Output JSON path, relative to workspace unless absolute.")
-    parser.add_argument("--stats-json", default="data/wos_minimax_items.stats.json", help="Stats JSON path, relative to workspace unless absolute.")
     parser.add_argument("--no-archive", action="store_true", help="Do not move processed txt files after a successful merge.")
     parser.add_argument(
         "--archive-scope",
@@ -256,10 +250,6 @@ def main() -> None:
     out_json = Path(args.out_json)
     if not out_json.is_absolute():
         out_json = workspace / out_json
-
-    stats_json = Path(args.stats_json)
-    if not stats_json.is_absolute():
-        stats_json = workspace / stats_json
 
     archive_dir = Path(args.archive_dir)
     if not archive_dir.is_absolute():
@@ -283,13 +273,9 @@ def main() -> None:
         "inputs": [str(path) for path in input_dirs],
         "output_json": str(out_json),
     }
-    stats_json.parent.mkdir(parents=True, exist_ok=True)
-    stats_json.write_text(json.dumps(final_stats, ensure_ascii=False, indent=2), encoding="utf-8")
-
     print("WoS merge complete")
     print(json.dumps(final_stats, ensure_ascii=False, indent=2))
     print(f"JSON : {out_json}")
-    print(f"STATS: {stats_json}")
 
 
 if __name__ == "__main__":

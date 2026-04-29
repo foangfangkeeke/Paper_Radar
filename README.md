@@ -14,8 +14,7 @@ fetch -> merge -> screen -> push
 
 1. **Fetch**: Browser automation logs into WoS and exports search results as Plain Text files
 2. **Merge**: Parses and deduplicates only the current source run in memory
-3. **Enrich**: Fills missing abstracts by DOI for the current run in memory
-4. **Screen**: MiniMax LLM scores and tags each new paper against your research directions
+3. **Screen**: MiniMax LLM scores and tags each new paper with an abstract against your research directions
 4. **Push**: Generates a Markdown digest from high-scoring papers
 
 ## Research Directions
