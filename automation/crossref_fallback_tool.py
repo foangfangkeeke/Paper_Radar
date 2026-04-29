@@ -273,6 +273,7 @@ def fetch_crossref_fallback_exports(
     workspace: str | Path,
     start_date: dt.date,
     end_date: dt.date,
+    output_dir: str | Path | None = None,
     log: LogFn = print,
 ) -> list[Path]:
     workspace_path = Path(workspace).resolve()
@@ -329,7 +330,10 @@ def fetch_crossref_fallback_exports(
 
     deduped = merge_records(records)
     generated_at = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    export_path = workspace_path / "data" / "source_exports" / f"crossref_fallback_{generated_at}.txt"
+    export_dir = Path(output_dir) if output_dir is not None else workspace_path / "data" / "source_exports"
+    if not export_dir.is_absolute():
+        export_dir = workspace_path / export_dir
+    export_path = export_dir / f"crossref_fallback_{generated_at}.txt"
     write_synthetic_wos_export(deduped, export_path)
 
     # Keep the merge-compatible fields explicit; extra fields are saved only for

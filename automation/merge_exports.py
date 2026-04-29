@@ -14,8 +14,8 @@ Archive behavior:
 Main output:
   data/wos_minimax_items.json
 
-Each output item contains only:
-  key, TI, SO, AB
+Each output item contains:
+  key, TI, SO, AB, DI, PY, UT when available
 """
 
 from __future__ import annotations
@@ -102,7 +102,12 @@ def record_to_minimax_item(raw: dict[str, str]) -> dict[str, str] | None:
     else:
         key = "title:" + normalize_title(title)
 
-    return {"key": key, "TI": title, "SO": journal, "AB": abstract}
+    item = {"key": key, "TI": title, "SO": journal, "AB": abstract}
+    for tag in ("DI", "PY", "UT"):
+        value = clean_text(raw.get(tag))
+        if value:
+            item[tag] = value
+    return item
 
 
 def is_inside_archive(path: Path) -> bool:

@@ -1224,11 +1224,14 @@ def fetch_wos_plain_text_exports(
     journals: list[str],
     start_date: dt.date | str,
     end_date: dt.date | str,
+    download_dir: str | Path | None = None,
     config_path: str | Path | None = None,
     log: LogFn = print,
 ) -> list[Path]:
     workspace_path = Path(workspace).resolve()
     cfg = WosToolConfig.from_file(workspace_path, Path(config_path) if config_path else None)
+    if download_dir is not None:
+        cfg.download_dir = resolve_workspace_path(workspace_path, download_dir) or workspace_path / str(download_dir)
     tool = WosBrowserTool(cfg, log=log)
 
     return tool.fetch_exports(
@@ -1243,6 +1246,7 @@ def fetch_wos_from_project_configs(
     workspace: str | Path,
     start_date: dt.date | str,
     end_date: dt.date | str,
+    download_dir: str | Path | None = None,
     log: LogFn = print,
 ) -> list[Path]:
     workspace_path = Path(workspace).resolve()
@@ -1257,6 +1261,7 @@ def fetch_wos_from_project_configs(
         journals=journals_from_watch_config(paper_watch),
         start_date=start_date,
         end_date=end_date,
+        download_dir=download_dir,
         log=log,
     )
 

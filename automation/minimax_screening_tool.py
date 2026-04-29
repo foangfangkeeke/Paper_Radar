@@ -147,7 +147,7 @@ def merge_by_identity(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def paper_identities(item: dict[str, Any]) -> list[str]:
     title = clean_text(item.get("Title") or item.get("title") or item.get("TI"))
-    doi = clean_text(item.get("DOI") or item.get("doi"))
+    doi = clean_text(item.get("DOI") or item.get("doi") or item.get("DI"))
     explicit_key = clean_text(item.get("Key") or item.get("key"))
     title_key = clean_text(item.get("TitleKey")) or title_key_from_title(title)
     doi_key = clean_text(item.get("DoiKey")) or doi_key_from_doi(doi)
@@ -441,7 +441,6 @@ def build_user_prompt(papers: list[dict[str, Any]]) -> str:
             "key": clean_text(paper.get("Key")),
             "title": clean_text(paper.get("Title")),
             "journal": clean_text(paper.get("Journal")),
-            "date": clean_text(paper.get("Date")),
             "abstract": paper_abstract(paper),
         }
         for paper in papers
@@ -677,10 +676,7 @@ def legacy_queue_record(record: dict[str, Any]) -> dict[str, Any]:
         "Source": record["Source"],
         "Title": record["Title"],
         "Journal": record["Journal"],
-        "Date": record["Date"],
         "DateObject": record["DateObject"],
-        "DOI": record["DOI"],
-        "Url": record["Url"],
         "Abstract": record.get("Abstract", ""),
         "MatchedDirections": record.get("MatchedDirections", []),
         "RecommendationScore": int(record.get("RecommendationScore", 0)),
