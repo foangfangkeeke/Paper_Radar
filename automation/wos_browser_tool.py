@@ -14,7 +14,11 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import json
+import os
 import re
+import shutil
+import socket
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -73,6 +77,57 @@ def list_text_exports(export_dir: Path, since: float | None = None) -> list[Path
     return sorted(files, key=lambda p: p.stat().st_mtime)
 
 
+def parse_debugger_address(address: str) -> tuple[str, int]:
+    text = clean_text(address) or "127.0.0.1:9222"
+    if ":" not in text:
+        return text, 9222
+    host, port_text = text.rsplit(":", 1)
+    return host.strip() or "127.0.0.1", int(port_text.strip() or "9222")
+
+
+def is_tcp_port_open(host: str, port: int, timeout_sec: float = 0.5) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return True
+    except OSError:
+        return False
+
+
+def find_chrome_binary(configured_path: str = "") -> str:
+    if configured_path and Path(configured_path).exists():
+        return configured_path
+
+    candidates = [
+        os.environ.get("CHROME_PATH", ""),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        str(Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe"),
+        shutil.which("chrome") or "",
+        shutil.which("chrome.exe") or "",
+        shutil.which("google-chrome") or "",
+        shutil.which("chromium") or "",
+        shutil.which("chromium-browser") or "",
+    ]
+
+    for path in candidates:
+        if path and Path(path).exists():
+            return str(path)
+
+    raise RuntimeError(
+        "Could not find Chrome binary. Set chromeBinary in automation/wos.config.json."
+    )
+
+
+def wait_for_debugger(address: str, timeout_sec: float = 12.0) -> None:
+    host, port = parse_debugger_address(address)
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        if is_tcp_port_open(host, port):
+            return
+        time.sleep(0.25)
+    raise RuntimeError(f"Chrome debugger not reachable at {address} after {timeout_sec:.0f}s")
+
+
 @dataclasses.dataclass
 class WosToolConfig:
     start_url: str = DEFAULT_WOS_URL
@@ -81,6 +136,10 @@ class WosToolConfig:
     browser_profile_dir: Path = Path("data/browser_profiles/wos")
     account: str = ""
     password: str = ""
+    attach_existing_browser: bool = True
+    auto_launch_debug_chrome: bool = True
+    debugger_address: str = "127.0.0.1:9222"
+    chrome_binary: str = ""
 
     auto_search: bool = True
     auto_export: bool = True
@@ -123,6 +182,10 @@ class WosToolConfig:
             or workspace / "data" / "browser_profiles" / "wos",
             account=str(cfg.get("account") or ""),
             password=str(cfg.get("password") or ""),
+            attach_existing_browser=bool(cfg.get("attachExistingBrowser", True)),
+            auto_launch_debug_chrome=bool(cfg.get("autoLaunchDebugChrome", True)),
+            debugger_address=str(cfg.get("debuggerAddress") or "127.0.0.1:9222"),
+            chrome_binary=str(cfg.get("chromeBinary") or ""),
             auto_search=bool(cfg.get("autoSearch", True)),
             auto_export=bool(cfg.get("autoExport", True)),
             open_each_keyword_in_new_tab=bool(cfg.get("openEachKeywordInNewTab", False)),
@@ -258,12 +321,69 @@ class WosBrowserTool:
         from selenium import webdriver
 
         cfg = self.config
+        cfg.download_dir.mkdir(parents=True, exist_ok=True)
+        cfg.browser_profile_dir.mkdir(parents=True, exist_ok=True)
+
         options = webdriver.ChromeOptions()
+
+        if cfg.attach_existing_browser:
+            # Full-auto stable mode:
+            # 1) Start a normal Chrome process with remote debugging if 9222 is not open.
+            # 2) Attach Selenium to that Chrome.
+            # This avoids webdriver-created sessions while still requiring no manual browser launch.
+            host, port = parse_debugger_address(cfg.debugger_address)
+            if not is_tcp_port_open(host, port):
+                if not cfg.auto_launch_debug_chrome:
+                    raise RuntimeError(
+                        f"Chrome debugger is not reachable at {cfg.debugger_address}. "
+                        "Either start Chrome manually with --remote-debugging-port, "
+                        "or set autoLaunchDebugChrome=true."
+                    )
+
+                chrome_binary = find_chrome_binary(cfg.chrome_binary)
+                cmd = [
+                    chrome_binary,
+                    f"--remote-debugging-port={port}",
+                    f"--user-data-dir={str(cfg.browser_profile_dir.resolve())}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-notifications",
+                    "--start-maximized",
+                    "about:blank",
+                ]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.log(
+                    f"Chrome launched for attach mode | debuggerAddress={cfg.debugger_address} | "
+                    f"profileDir={cfg.browser_profile_dir}"
+                )
+                wait_for_debugger(cfg.debugger_address, timeout_sec=15)
+
+            # Attach mode: do not pass user-data-dir/prefs/excludeSwitches/useAutomationExtension
+            # to chromedriver; Chrome has already been launched above.
+            options.add_experimental_option("debuggerAddress", cfg.debugger_address)
+            driver = webdriver.Chrome(options=options)
+            self.driver = driver
+
+            try:
+                driver.execute_cdp_cmd(
+                    "Page.setDownloadBehavior",
+                    {
+                        "behavior": "allow",
+                        "downloadPath": str(cfg.download_dir.resolve()),
+                    },
+                )
+            except Exception as exc:
+                self.log(f"Warning: failed to set Chrome download dir via CDP: {exc}")
+
+            self.log(
+                f"WoS browser attached | downloadDir={cfg.download_dir} | "
+                f"debuggerAddress={cfg.debugger_address}"
+            )
+            return driver
+
         options.add_argument(f"--user-data-dir={cfg.browser_profile_dir}")
         options.add_argument("--start-maximized")
         options.add_argument("--disable-notifications")
-        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        options.add_experimental_option("useAutomationExtension", False)
         options.add_experimental_option(
             "prefs",
             {
@@ -776,33 +896,62 @@ class WosBrowserTool:
     def _select_search_field(self, driver: Any, row: Any, field_name: str) -> None:
         from selenium.webdriver.support.ui import WebDriverWait
 
+        wait = WebDriverWait(driver, self.config.wos_wait_timeout_sec)
         dropdown = self._get_search_field_dropdown(row)
 
         if self._dropdown_has_field(dropdown, field_name):
             return
 
         self._scroll_into_view(driver, dropdown)
-        dropdown.click()
+
+        try:
+            dropdown.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", dropdown)
+
+        wait.until(
+            lambda _: clean_text(dropdown.get_attribute("aria-expanded")).lower() == "true"
+            or len(
+                driver.find_elements(
+                    "css selector",
+                    ".cdk-overlay-container [role='option'], "
+                    ".cdk-overlay-container mat-option, "
+                    ".cdk-overlay-container button, "
+                    "[role='listbox'] [role='option'], "
+                    "[role='listbox'] button",
+                )
+            )
+            > 0
+        )
 
         option = self._find_visible_option_by_text(driver, field_name, self.config.wos_wait_timeout_sec)
         self._scroll_into_view(driver, option)
-        option.click()
 
-        WebDriverWait(driver, self.config.wos_wait_timeout_sec).until(
-            lambda _: self._dropdown_has_field(self._get_search_field_dropdown(row), field_name)
-        )
-        time.sleep(0.15)
+        try:
+            option.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", option)
+
+        wait.until(lambda _: self._dropdown_has_field(self._get_search_field_dropdown(row), field_name))
+        time.sleep(0.2)
 
     def _get_search_field_dropdown(self, row: Any) -> Any:
         from selenium.webdriver.common.by import By
+
+        buttons = row.find_elements(
+            By.CSS_SELECTOR,
+            "wos-select[data-ta='search-field-dropdown'] button[role='combobox']",
+        )
+        if buttons:
+            return buttons[0]
 
         for button in row.find_elements(By.CSS_SELECTOR, "button[role='combobox']"):
             label = clean_text(button.get_attribute("aria-label"))
             data_ta = clean_text(button.get_attribute("data-ta"))
             text = clean_text(button.text)
-            lower = f"{label} {data_ta} {text}".lower()
+            merged = f"{label} {data_ta} {text}".lower()
 
-            if "select search field" in lower:
+            if "select search field" in merged or data_ta:
                 return button
 
         raise RuntimeError("Could not find WoS search-field dropdown in row.")
@@ -812,14 +961,34 @@ class WosBrowserTool:
         aliases = {wanted}
 
         if wanted == "publication/source titles":
-            aliases.update({"publication titles", "source titles"})
+            aliases.update(
+                {
+                    "publication/source titles",
+                    "publication titles",
+                    "source titles",
+                    "publication title",
+                    "source title",
+                }
+            )
+
         if wanted in {"publication date", "publication data"}:
-            aliases.update({"publication date", "publication data"})
+            aliases.update(
+                {
+                    "publication date",
+                    "publication data",
+                    "date",
+                    "date range",
+                }
+            )
+
+        if wanted == "topic":
+            aliases.update({"topic"})
 
         text = (
             f"{clean_text(dropdown.text)} "
             f"{clean_text(dropdown.get_attribute('aria-label'))} "
-            f"{clean_text(dropdown.get_attribute('data-ta'))}"
+            f"{clean_text(dropdown.get_attribute('data-ta'))} "
+            f"{clean_text(dropdown.get_attribute('title'))}"
         ).lower()
 
         return any(alias in text for alias in aliases)
@@ -832,26 +1001,77 @@ class WosBrowserTool:
         aliases = {wanted}
 
         if wanted == "publication/source titles":
-            aliases.update({"publication titles", "source titles"})
+            aliases.update(
+                {
+                    "publication/source titles",
+                    "publication titles",
+                    "source titles",
+                    "publication title",
+                    "source title",
+                }
+            )
+
         if wanted in {"publication date", "publication data"}:
-            aliases.update({"publication date", "publication data"})
+            aliases.update(
+                {
+                    "publication date",
+                    "publication data",
+                    "date",
+                    "date range",
+                }
+            )
+
+        if wanted == "topic":
+            aliases.update({"topic"})
+
+        def norm(value: Any) -> str:
+            return clean_text(value).lower()
 
         def locate(_: Any) -> Any:
             candidates = driver.find_elements(
                 By.CSS_SELECTOR,
                 ".cdk-overlay-container [role='option'], "
                 ".cdk-overlay-container mat-option, "
-                ".cdk-overlay-container button",
+                ".cdk-overlay-container button, "
+                "[role='listbox'] [role='option'], "
+                "[role='listbox'] button",
             )
 
-            for element in candidates:
-                if element.is_displayed() and clean_text(element.text).lower() in aliases:
+            visible_candidates = [element for element in candidates if element.is_displayed()]
+
+            for element in visible_candidates:
+                label = norm(element.text)
+                aria = norm(element.get_attribute("aria-label"))
+                data_ta = norm(element.get_attribute("data-ta"))
+                title = norm(element.get_attribute("title"))
+                merged = " ".join([label, aria, data_ta, title]).strip()
+
+                if any(alias == label or alias == aria or alias == data_ta or alias == title for alias in aliases):
                     return element
 
-            for element in candidates:
-                label = clean_text(element.text).lower()
-                if element.is_displayed() and any(alias in label for alias in aliases):
+                if any(f" {alias} " in f" {merged} " for alias in aliases):
                     return element
+
+            for element in visible_candidates:
+                label = norm(element.text)
+                aria = norm(element.get_attribute("aria-label"))
+                data_ta = norm(element.get_attribute("data-ta"))
+                title = norm(element.get_attribute("title"))
+                merged = " ".join([label, aria, data_ta, title]).strip()
+
+                if any(alias in merged for alias in aliases):
+                    return element
+
+            for alias in aliases:
+                xpath = (
+                    "//*[self::button or self::mat-option or @role='option']"
+                    "[contains(translate(normalize-space(.), "
+                    "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), "
+                    f"{alias!r})]"
+                )
+                for element in driver.find_elements(By.XPATH, xpath):
+                    if element.is_displayed():
+                        return element
 
             return False
 
@@ -982,6 +1202,10 @@ class WosBrowserTool:
 
     def close(self) -> None:
         if self.driver is not None:
+            if getattr(self.config, "attach_existing_browser", False):
+                # In attach mode, keep the user's Chrome alive. Just drop the driver handle.
+                self.driver = None
+                return
             self.driver.quit()
             self.driver = None
 
