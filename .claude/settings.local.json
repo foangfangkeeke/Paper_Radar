@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python automation/screen_items.py --dry-run)",
+      "Bash(python *)"
+    ]
+  }
+}

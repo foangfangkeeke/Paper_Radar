@@ -617,7 +617,7 @@ class WosBrowserTool:
     def _dropdown_has_field(self, dropdown: Any, field_name: str) -> bool:
         wanted = clean_text(field_name).lower()
         aliases = {wanted}
-        if wanted == "publication/source titles":
+        if wanted == "Publication/Source Titles":
             aliases.update({"publication titles", "source titles"})
         if wanted in {"publication date", "publication data"}:
             aliases.update({"publication date", "publication data"})
@@ -630,7 +630,7 @@ class WosBrowserTool:
 
         wanted = clean_text(text).lower()
         aliases = {wanted}
-        if wanted == "publication/source titles":
+        if wanted == "Publication/Source Titles":
             aliases.update({"publication titles", "source titles"})
         if wanted in {"publication date", "publication data"}:
             aliases.update({"publication date", "publication data"})

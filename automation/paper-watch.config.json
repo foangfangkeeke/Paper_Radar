@@ -1,7 +1,5 @@
 {
-  "maxRecentPerKeyword": 0,
-  "paperSearchProvider": "crossref",
-  "crossrefKeywordQueryField": "query.bibliographic",
+  "paperSource": "wos_plain_text_export",
   "dailyPickCount": 1,
   "candidate": {
     "minTopicScore": 2,
@@ -17,7 +15,6 @@
   "llmScreening": {
     "provider": "minimax",
     "configPath": "automation/minimax.config.json",
-    "batchSize": 10,
     "cachePath": "data/paper-screening-cache.json",
     "pushHistoryPath": "data/paper-push-history.json",
     "minLlmScore": 6
