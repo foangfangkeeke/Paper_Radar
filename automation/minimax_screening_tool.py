@@ -473,8 +473,8 @@ Scoring:
 Return both "score" and "scoreBreakdown". Score measures topical relevance only, not journal quality, recency, citation impact, or general novelty.
 - directionRelevance: 0-10, match to the user's research directions.
 - methodRelevance: 0-10, relevance of the method/model/algorithm to the user's agenda.
-- applicationRelevance: 0-10, relevance of the application domain or empirical setting.
-- evidenceConfidence: 0-10, confidence that the match is substantive based on title/abstract rather than incidental keywords.
+- novelty: 0-10, freshness or distinctiveness suggested by title/abstract.
+- transferability: 0-10, usefulness for the user's future papers or modeling design.
 - total: sum of the four components, 0-40.
 - score: rounded average of the four components, 0-10.
 
@@ -511,9 +511,8 @@ Return exactly one JSON object:
       "scoreBreakdown": {{
         "directionRelevance": 9,
         "methodRelevance": 8,
-        "applicationRelevance": 7,
-        "evidenceConfidence": 8,
-        "total": 32
+        "novelty": 7,
+        "transferability": 8,
       }},
       "tags": {{
         "Object": "electric bus charging system",
@@ -588,8 +587,8 @@ def normalize_score_breakdown(value: Any) -> dict[str, int]:
     output = {
         "DirectionRelevance": as_int(value.get("directionRelevance"), 0),
         "MethodRelevance": as_int(value.get("methodRelevance"), 0),
-        "ApplicationRelevance": as_int(value.get("applicationRelevance", value.get("novelty")), 0),
-        "EvidenceConfidence": as_int(value.get("evidenceConfidence", value.get("transferability")), 0),
+        "Novelty": as_int(value.get("novelty"), 0),
+        "Transferability": as_int(value.get("transferability"), 0),
     }
     output["Total"] = sum(output.values())
     return output
@@ -628,18 +627,18 @@ def compact_score_breakdown(value: Any) -> dict[str, int]:
     direction = as_int(value.get("DirectionRelevance", value.get("directionRelevance")), 0)
     method = as_int(value.get("MethodRelevance", value.get("methodRelevance")), 0)
     application = as_int(
-        value.get("ApplicationRelevance", value.get("applicationRelevance", value.get("Novelty", value.get("novelty")))),
+        value.get("Novelty", value.get("Novelty", value.get("Novelty", value.get("novelty")))),
         0,
     )
     confidence = as_int(
-        value.get("EvidenceConfidence", value.get("evidenceConfidence", value.get("Transferability", value.get("transferability")))),
+        value.get("transferability", value.get("transferability", value.get("Transferability", value.get("transferability")))),
         0,
     )
     output = {
         "DirectionRelevance": direction,
         "MethodRelevance": method,
-        "ApplicationRelevance": application,
-        "EvidenceConfidence": confidence,
+        "Novelty": application,
+        "transferability": confidence,
     }
     output["Total"] = sum(output.values())
     return output
@@ -678,7 +677,6 @@ def compact_queue_record(item: dict[str, Any]) -> dict[str, Any]:
         directions = item.get("directions") if isinstance(item.get("directions"), list) else []
     return {
         "Key": clean_text(item.get("Key") or item.get("key")),
-        "DOI": queue_doi(item),
         "Title": clean_text(item.get("Title") or item.get("title") or item.get("TI")),
         "Journal": clean_text(item.get("Journal") or item.get("journal") or item.get("SO")),
         "Abstract": clean_text(item.get("Abstract") or item.get("abstract") or item.get("AB")),
@@ -696,7 +694,7 @@ def should_push_record(item: dict[str, Any], min_push_score: int) -> bool:
 
 
 def sort_base_queue(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(items, key=lambda x: (int(x.get("Score", 0) or 0), str(x.get("Key") or "")), reverse=True)
+    return sorted(items, key=lambda x: (str(x.get("ScreenedAt") or ""), str(x.get("Key") or "")), reverse=True)
 
 
 def sort_push_queue(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
