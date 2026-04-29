@@ -22,7 +22,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rebuild-push", action="store_true")
-    parser.add_argument("--no-legacy", action="store_true")
     return parser.parse_args()
 
 
@@ -40,7 +39,6 @@ def main() -> None:
         limit=args.limit,
         dry_run=bool(args.dry_run),
         rebuild_push=bool(args.rebuild_push),
-        write_legacy=not bool(args.no_legacy),
         log=log,
     )
     log(f"Done | pushQueueSize={len(queue)} | output={workspace / 'data' / 'paper_push_queue.json'}")

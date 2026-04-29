@@ -336,21 +336,5 @@ def fetch_crossref_fallback_exports(
     export_path = export_dir / f"crossref_fallback_{generated_at}.txt"
     write_synthetic_wos_export(deduped, export_path)
 
-    # Keep the merge-compatible fields explicit; extra fields are saved only for
-    # inspection and are ignored by merge_exports.py.
-    write_json(
-        workspace_path / "data" / "paper-source-candidates.json",
-        {
-            "generatedAt": dt.datetime.now().astimezone().isoformat(),
-            "source": "crossref_fallback",
-            "exportPath": str(export_path),
-            "fromDate": start_date.isoformat(),
-            "untilDate": end_date.isoformat(),
-            "rawCount": len(records),
-            "dedupedCount": len(deduped),
-            "papers": deduped,
-            "mergeCompatibleFields": ["key", "TI", "SO", "AB"],
-        },
-    )
     log(f"Crossref fallback export written | papers={len(deduped)}; path={export_path}")
     return [export_path] if deduped else []

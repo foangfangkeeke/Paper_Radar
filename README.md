@@ -13,8 +13,8 @@ fetch -> merge -> screen -> push
 ```
 
 1. **Fetch**: Browser automation logs into WoS and exports search results as Plain Text files
-2. **Merge**: Parses and deduplicates only the current source run into `data/current_source_items.json`
-3. **Enrich**: Fills missing abstracts by DOI when available, using a local cache
+2. **Merge**: Parses and deduplicates only the current source run in memory
+3. **Enrich**: Fills missing abstracts by DOI for the current run in memory
 4. **Screen**: MiniMax LLM scores and tags each new paper against your research directions
 4. **Push**: Generates a Markdown digest from high-scoring papers
 
@@ -86,7 +86,7 @@ python automation/agent.py push --count 5
 │   ├── source_exports/runs/      # Per-run WoS txt files and Crossref fallback txt files
 │   ├── paper_base_queue.json     # All screened papers
 │   ├── paper_push_queue.json     # High-scoring papers for review
-│   └── paper-screening-cache.json # Screening results cache
+│   └── paper-queue-build-state.json # Latest build state
 └── reports/
     ├── inbox/                    # Drop WoS txt files here (optional)
     └── archive/                  # Archived processed files
@@ -127,9 +127,7 @@ python automation/agent.py push --count 5
 ## Output Files
 
 - **`data/source_exports/runs/<run_id>/`**: Unified per-run source export folder for WoS and Crossref fallback plain-text files
-- **`data/current_source_items.json`**: Current-run merged and deduplicated paper metadata
-- **`data/current_source_items.enriched.json`**: Current-run items after missing abstract enrichment
-- **`data/wos_minimax_items.json`**: Compatibility copy of latest enriched current-run metadata
 - **`data/paper_base_queue.json`**: All screened papers with scores and tags
 - **`data/paper_push_queue.json`**: Papers scoring above threshold, sorted by recommendation score
+- **`data/paper-queue-build-state.json`**: Latest screening/build state
 - **`reports/push_YYYY-MM-DD.md`**: Markdown digest for review

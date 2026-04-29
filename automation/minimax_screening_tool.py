@@ -470,11 +470,11 @@ Decision rules:
 - If accept=true: include every matched direction and choose the strongest one as primaryDirection.
 
 Scoring:
-Return both "score" and "scoreBreakdown".
+Return both "score" and "scoreBreakdown". Score measures topical relevance only, not journal quality, recency, citation impact, or general novelty.
 - directionRelevance: 0-10, match to the user's research directions.
-- methodRelevance: 0-10, usefulness of the method/model/algorithm.
-- novelty: 0-10, freshness or distinctiveness suggested by title/abstract.
-- transferability: 0-10, usefulness for the user's future papers or modeling design.
+- methodRelevance: 0-10, relevance of the method/model/algorithm to the user's agenda.
+- applicationRelevance: 0-10, relevance of the application domain or empirical setting.
+- evidenceConfidence: 0-10, confidence that the match is substantive based on title/abstract rather than incidental keywords.
 - total: sum of the four components, 0-40.
 - score: rounded average of the four components, 0-10.
 
@@ -511,8 +511,8 @@ Return exactly one JSON object:
       "scoreBreakdown": {{
         "directionRelevance": 9,
         "methodRelevance": 8,
-        "novelty": 7,
-        "transferability": 8,
+        "applicationRelevance": 7,
+        "evidenceConfidence": 8,
         "total": 32
       }},
       "tags": {{
@@ -588,8 +588,8 @@ def normalize_score_breakdown(value: Any) -> dict[str, int]:
     output = {
         "DirectionRelevance": as_int(value.get("directionRelevance"), 0),
         "MethodRelevance": as_int(value.get("methodRelevance"), 0),
-        "Novelty": as_int(value.get("novelty"), 0),
-        "Transferability": as_int(value.get("transferability"), 0),
+        "ApplicationRelevance": as_int(value.get("applicationRelevance", value.get("novelty")), 0),
+        "EvidenceConfidence": as_int(value.get("evidenceConfidence", value.get("transferability")), 0),
     }
     output["Total"] = sum(output.values())
     return output
@@ -614,85 +614,101 @@ def normalize_tags(value: Any) -> dict[str, Any]:
     return output
 
 
+def queue_doi(item: dict[str, Any]) -> str:
+    doi = clean_text(item.get("DOI") or item.get("doi") or item.get("DI"))
+    key = clean_text(item.get("Key") or item.get("key"))
+    if not doi and key.lower().startswith("doi:"):
+        doi = key[4:].strip()
+    return doi
+
+
+def compact_score_breakdown(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    direction = as_int(value.get("DirectionRelevance", value.get("directionRelevance")), 0)
+    method = as_int(value.get("MethodRelevance", value.get("methodRelevance")), 0)
+    application = as_int(
+        value.get("ApplicationRelevance", value.get("applicationRelevance", value.get("Novelty", value.get("novelty")))),
+        0,
+    )
+    confidence = as_int(
+        value.get("EvidenceConfidence", value.get("evidenceConfidence", value.get("Transferability", value.get("transferability")))),
+        0,
+    )
+    output = {
+        "DirectionRelevance": direction,
+        "MethodRelevance": method,
+        "ApplicationRelevance": application,
+        "EvidenceConfidence": confidence,
+    }
+    output["Total"] = sum(output.values())
+    return output
+
+
 def build_queue_record(paper: dict[str, Any], result: dict[str, Any], min_push_score: int) -> dict[str, Any]:
     score = as_int(result.get("score"), 0)
     breakdown = normalize_score_breakdown(result.get("scoreBreakdown"))
     accepted = bool(result.get("accept"))
     directions_raw = result.get("directions", [])
     directions = [clean_text(x) for x in directions_raw if clean_text(x)] if isinstance(directions_raw, list) else []
-    primary_direction = clean_text(result.get("primaryDirection") or (directions[0] if directions else ""))
     tags = normalize_tags(result.get("tags"))
-    now = dt.datetime.now().astimezone().isoformat()
-    in_push_queue = accepted and score >= min_push_score
 
     return {
         "Key": paper["Key"],
-        "DoiKey": clean_text(paper.get("DoiKey")) or doi_key_from_doi(paper.get("DOI", "")),
-        "TitleKey": clean_text(paper.get("TitleKey")) or title_key_from_title(paper.get("Title", "")),
+        "DOI": queue_doi(paper),
         "Title": paper["Title"],
         "Journal": paper["Journal"],
-        "Date": paper["Date"],
-        "DateObject": paper["DateObject"],
-        "DOI": paper["DOI"],
-        "Url": paper["Url"],
         "Abstract": paper_abstract(paper),
-        "Source": paper["Source"],
         "Accepted": accepted,
-        "Status": "pending" if in_push_queue else "rejected",
-        "InPushQueue": in_push_queue,
-        "PrimaryDirection": primary_direction,
         "MatchedDirections": directions,
         "Score": score,
-        "RecommendationScore": breakdown["Total"],
         "ScoreBreakdown": breakdown,
         "Tags": tags,
-        "Keywords": tags.get("Keywords", []),
         "Comment": clean_text(result.get("comment") or ""),
-        "ScreenSchemaVersion": SCREEN_SCHEMA_VERSION,
-        "ScreenedAt": now,
-        "PushedAt": None,
-        "Feedback": None,
     }
 
 
+def compact_queue_record(item: dict[str, Any]) -> dict[str, Any]:
+    tags = item.get("Tags")
+    if not isinstance(tags, dict):
+        tags = item.get("tags") if isinstance(item.get("tags"), dict) else {}
+    breakdown = compact_score_breakdown(item.get("ScoreBreakdown"))
+    directions = item.get("MatchedDirections")
+    if not isinstance(directions, list):
+        directions = item.get("directions") if isinstance(item.get("directions"), list) else []
+    return {
+        "Key": clean_text(item.get("Key") or item.get("key")),
+        "DOI": queue_doi(item),
+        "Title": clean_text(item.get("Title") or item.get("title") or item.get("TI")),
+        "Journal": clean_text(item.get("Journal") or item.get("journal") or item.get("SO")),
+        "Abstract": clean_text(item.get("Abstract") or item.get("abstract") or item.get("AB")),
+        "Accepted": bool(item.get("Accepted") if "Accepted" in item else item.get("accept")),
+        "MatchedDirections": [clean_text(x) for x in directions if clean_text(x)],
+        "Score": as_int(item.get("Score", item.get("score")), 0),
+        "ScoreBreakdown": breakdown,
+        "Tags": normalize_tags(tags),
+        "Comment": clean_text(item.get("Comment") or item.get("comment")),
+    }
+
+
+def should_push_record(item: dict[str, Any], min_push_score: int) -> bool:
+    return bool(item.get("Accepted")) and as_int(item.get("Score"), 0) >= min_push_score
+
+
 def sort_base_queue(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(items, key=lambda x: (str(x.get("ScreenedAt") or ""), str(x.get("Key") or "")), reverse=True)
+    return sorted(items, key=lambda x: (int(x.get("Score", 0) or 0), str(x.get("Key") or "")), reverse=True)
 
 
 def sort_push_queue(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         items,
-        key=lambda x: (int(x.get("RecommendationScore", 0)), int(x.get("Score", 0)), str(x.get("DateObject") or "")),
+        key=lambda x: (
+            int(x.get("Score", 0) or 0),
+            int((x.get("ScoreBreakdown") or {}).get("Total", 0) if isinstance(x.get("ScoreBreakdown"), dict) else 0),
+            str(x.get("Key") or ""),
+        ),
         reverse=True,
     )
-
-
-def legacy_queue_record(record: dict[str, Any]) -> dict[str, Any]:
-    tags = record.get("Tags", {}) if isinstance(record.get("Tags"), dict) else {}
-    return {
-        "Key": record["Key"],
-        "DoiKey": record.get("DoiKey", ""),
-        "TitleKey": record.get("TitleKey", ""),
-        "Source": record["Source"],
-        "Title": record["Title"],
-        "Journal": record["Journal"],
-        "DateObject": record["DateObject"],
-        "Abstract": record.get("Abstract", ""),
-        "MatchedDirections": record.get("MatchedDirections", []),
-        "RecommendationScore": int(record.get("RecommendationScore", 0)),
-        "ScoreBreakdown": record.get("ScoreBreakdown", {}),
-        "LlmScreen": {
-            "Accepted": bool(record.get("Accepted")),
-            "Score": int(record.get("Score", 0)),
-            "PrimaryDirection": record.get("PrimaryDirection", ""),
-            "Directions": record.get("MatchedDirections", []),
-            "Tags": tags,
-            "Comment": record.get("Comment", ""),
-            "Keywords": tags.get("Keywords", []),
-        },
-        "ScreenSchemaVersion": SCREEN_SCHEMA_VERSION,
-        "QueuedAt": record.get("ScreenedAt"),
-    }
 
 
 def save_queues(
@@ -701,41 +717,13 @@ def save_queues(
     push_queue: list[dict[str, Any]],
     processed_count: int,
     total_to_screen: int,
-    write_legacy: bool = True,
 ) -> None:
     data_dir = workspace / "data"
-    base_sorted = sort_base_queue(base_queue)
-    push_sorted = sort_push_queue(push_queue)
+    base_sorted = sort_base_queue([compact_queue_record(item) for item in base_queue if isinstance(item, dict)])
+    push_sorted = sort_push_queue([compact_queue_record(item) for item in push_queue if isinstance(item, dict)])
 
     write_json(data_dir / "paper_base_queue.json", base_sorted)
     write_json(data_dir / "paper_push_queue.json", push_sorted)
-
-    if write_legacy:
-        write_json(data_dir / "paper-candidate-queue.json", [legacy_queue_record(item) for item in push_sorted])
-        write_json(
-            data_dir / "paper-screening-cache.json",
-            {
-                "generatedAt": dt.datetime.now().astimezone().isoformat(),
-                "papers": [
-                    {
-                        "Key": item["Key"],
-                        "DoiKey": item.get("DoiKey", ""),
-                        "TitleKey": item.get("TitleKey", ""),
-                        "Title": item["Title"],
-                        "Journal": item["Journal"],
-                        "Accepted": bool(item.get("Accepted")),
-                        "Score": int(item.get("Score", 0)),
-                        "RecommendationScore": int(item.get("RecommendationScore", 0)),
-                        "ScoreBreakdown": item.get("ScoreBreakdown", {}),
-                        "Tags": item.get("Tags", {}),
-                        "Comment": item.get("Comment", ""),
-                        "ScreenSchemaVersion": SCREEN_SCHEMA_VERSION,
-                        "ScreenedAt": item.get("ScreenedAt"),
-                    }
-                    for item in base_sorted
-                ],
-            },
-        )
 
     write_json(
         data_dir / "paper-queue-build-state.json",
@@ -758,7 +746,6 @@ def screen_papers_to_queues(
     workspace: str | Path,
     paper_watch_config: dict[str, Any] | None = None,
     min_push_score: int | None = None,
-    write_legacy: bool = True,
     log: LogFn = print,
 ) -> list[dict[str, Any]]:
     workspace_path = Path(workspace).resolve()
@@ -786,12 +773,7 @@ def screen_papers_to_queues(
     if not isinstance(push_queue, list):
         push_queue = []
 
-    screened_identities = {
-        identity
-        for item in base_queue
-        if int(item.get("ScreenSchemaVersion", 0) or 0) >= SCREEN_SCHEMA_VERSION
-        for identity in paper_identities(item)
-    }
+    screened_identities = {identity for item in base_queue if isinstance(item, dict) for identity in paper_identities(item)}
     screened_identities.discard("")
 
     deduped = merge_by_identity([paper for paper in papers if paper.get("Key")])
@@ -819,7 +801,7 @@ def screen_papers_to_queues(
             new_records.append(record)
 
         base_queue = merge_by_key(base_queue + new_records)
-        push_queue = merge_by_key(push_queue + [record for record in new_records if record["InPushQueue"]])
+        push_queue = merge_by_key(push_queue + [record for record in new_records if should_push_record(record, min_score)])
         processed += len(batch)
 
         save_queues(
@@ -828,11 +810,10 @@ def screen_papers_to_queues(
             push_queue,
             processed_count=processed,
             total_to_screen=len(to_screen),
-            write_legacy=write_legacy,
         )
         log(
             f"Batch saved | batch={batch_no}/{total_batches}; "
-            f"acceptedForPush={sum(1 for x in new_records if x['InPushQueue'])}/{len(batch)}; "
+            f"acceptedForPush={sum(1 for x in new_records if should_push_record(x, min_score))}/{len(batch)}; "
             f"baseQueue={len(base_queue)}; pushQueue={len(push_queue)}"
         )
 
@@ -842,7 +823,6 @@ def screen_papers_to_queues(
         push_queue,
         processed_count=processed,
         total_to_screen=len(to_screen),
-        write_legacy=write_legacy,
     )
     log(f"MiniMax screening complete | screened={len(to_screen)}; baseQueue={len(base_queue)}; pushQueue={len(push_queue)}")
     return sort_push_queue(push_queue)
@@ -855,7 +835,6 @@ def parse_wos_exports_and_screen(
     end_date: dt.date | None = None,
     paper_watch_config: dict[str, Any] | None = None,
     min_push_score: int | None = None,
-    write_legacy: bool = True,
     log: LogFn = print,
 ) -> list[dict[str, Any]]:
     workspace_path = Path(workspace).resolve()
@@ -881,17 +860,12 @@ def parse_wos_exports_and_screen(
                 kept.append(record)
 
     deduped = merge_by_key(kept)
-    write_json(
-        workspace_path / "data" / "paper-source-candidates.json",
-        {"generatedAt": dt.datetime.now().astimezone().isoformat(), "source": "source_exports", "papers": deduped},
-    )
     log(f"WoS parse complete | files={len(export_files)}; imported={imported}; kept={len(kept)}; deduped={len(deduped)}")
     return screen_papers_to_queues(
         deduped,
         workspace_path,
         paper_watch_config=paper_watch_config,
         min_push_score=min_push_score,
-        write_legacy=write_legacy,
         log=log,
     )
 
@@ -903,7 +877,6 @@ def screen_items_file(
     limit: int = 0,
     dry_run: bool = False,
     rebuild_push: bool = False,
-    write_legacy: bool = True,
     log: LogFn = print,
 ) -> list[dict[str, Any]]:
     workspace_path = Path(workspace).resolve()
@@ -921,8 +894,8 @@ def screen_items_file(
         base_queue = read_json(workspace_path / "data" / "paper_base_queue.json", [])
         if not isinstance(base_queue, list):
             base_queue = []
-        push_queue = [item for item in base_queue if bool(item.get("Accepted")) and int(item.get("Score", 0) or 0) >= min_score]
-        save_queues(workspace_path, base_queue, push_queue, processed_count=0, total_to_screen=0, write_legacy=write_legacy)
+        push_queue = [item for item in base_queue if should_push_record(item, min_score)]
+        save_queues(workspace_path, base_queue, push_queue, processed_count=0, total_to_screen=0)
         log(f"Push queue rebuilt | baseQueue={len(base_queue)}; pushQueue={len(push_queue)}; minPushScore={min_score}")
         return sort_push_queue(push_queue)
 
@@ -941,7 +914,6 @@ def screen_items_file(
         workspace_path,
         paper_watch_config=paper_watch_config,
         min_push_score=min_push_score,
-        write_legacy=write_legacy,
         log=log,
     )
 

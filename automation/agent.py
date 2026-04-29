@@ -78,8 +78,6 @@ def build_screen_cmd(py: str, args: argparse.Namespace, dry_run: bool = False) -
         cmd += ["--min-push-score", str(args.min_push_score)]
     if getattr(args, "rebuild_push", False):
         cmd.append("--rebuild-push")
-    if getattr(args, "no_legacy", False):
-        cmd.append("--no-legacy")
     return cmd
 
 
@@ -102,7 +100,6 @@ def main() -> None:
     p_screen.add_argument("--limit", type=int, default=0)
     p_screen.add_argument("--min-push-score", type=int, default=0)
     p_screen.add_argument("--rebuild-push", action="store_true")
-    p_screen.add_argument("--no-legacy", action="store_true")
 
     p_weekly = sub.add_parser(
         "weekly-update",
@@ -115,7 +112,6 @@ def main() -> None:
     p_weekly.add_argument("--no-archive", action="store_true")
     p_weekly.add_argument("--limit", type=int, default=0)
     p_weekly.add_argument("--min-push-score", type=int, default=0)
-    p_weekly.add_argument("--no-legacy", action="store_true")
 
     p_push = sub.add_parser("push", parents=[common], help="Generate a Markdown digest from pending push queue.")
     p_push.add_argument("--count", type=int, default=2)

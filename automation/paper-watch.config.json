@@ -15,8 +15,6 @@
   "llmScreening": {
     "provider": "minimax",
     "configPath": "automation/minimax.config.json",
-    "cachePath": "data/paper-screening-cache.json",
-    "pushHistoryPath": "data/paper-push-history.json",
     "minLlmScore": 6
   },
   "keywords": [

@@ -5,13 +5,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 from pathlib import Path
 
-from abstract_enrichment_tool import enrich_abstracts
+from abstract_enrichment_tool import enrich_abstract_items
 from crossref_fallback_tool import fetch_crossref_fallback_exports
 from merge_exports import merge_wos_exports
-from minimax_screening_tool import screen_items_file
+from minimax_screening_tool import screen_papers_to_queues
 from wos_browser_tool import fetch_wos_from_project_configs
 
 
@@ -25,7 +24,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", default="", help="Optional run id under data/source_exports/runs/.")
     parser.add_argument("--no-crossref-fallback", action="store_true", help="Do not use Crossref when WoS export fails.")
     parser.add_argument("--min-push-score", type=int, default=None)
-    parser.add_argument("--no-legacy", action="store_true")
     return parser.parse_args()
 
 
@@ -50,10 +48,6 @@ def main() -> None:
         run_id = args.run_id.strip() or dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = workspace / "data" / "source_exports" / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    current_items_path = workspace / "data" / "current_source_items.json"
-    enriched_items_path = workspace / "data" / "current_source_items.enriched.json"
-    current_stats_path = workspace / "data" / "current_source_items.stats.json"
-    legacy_stats_path = workspace / "data" / "wos_minimax_items.stats.json"
     merge_inputs: list[Path] = [run_dir]
 
     if args.skip_wos:
@@ -94,38 +88,21 @@ def main() -> None:
         raise RuntimeError("No WoS export txt files found.")
 
     items, stats, _ = merge_wos_exports(merge_inputs)
-    current_items_path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
-    final_stats = {
-        **stats,
-        "runId": run_id,
-        "runDir": str(run_dir),
-        "exportFiles": [str(path) for path in export_files],
-        "outputJson": str(current_items_path),
-    }
-    stats_text = json.dumps(final_stats, ensure_ascii=False, indent=2)
-    current_stats_path.write_text(stats_text, encoding="utf-8")
-    legacy_stats_path.write_text(stats_text, encoding="utf-8")
-    log(f"Current run merge complete | runId={run_id}; files={len(export_files)}; items={len(items)}; output={current_items_path}")
+    log(
+        f"Current run merge complete | runId={run_id}; files={len(export_files)}; "
+        f"imported={stats.get('imported_records')}; deduped={len(items)}"
+    )
 
-    enrich_abstracts(
-        input_path=current_items_path,
-        output_path=enriched_items_path,
+    enriched_items = enrich_abstract_items(
+        items=items,
         workspace=workspace,
         log=log,
     )
 
-    # Keep the historical filename as a compatibility pointer to the latest
-    # current-run enriched items; the run itself is still isolated by run_id.
-    (workspace / "data" / "wos_minimax_items.json").write_text(
-        enriched_items_path.read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-
-    queue = screen_items_file(
+    queue = screen_papers_to_queues(
+        papers=enriched_items,
         workspace=workspace,
-        input_path=enriched_items_path,
         min_push_score=args.min_push_score,
-        write_legacy=not bool(args.no_legacy),
         log=log,
     )
     log(f"Done | pushQueueSize={len(queue)} | output={workspace / 'data' / 'paper_push_queue.json'}")

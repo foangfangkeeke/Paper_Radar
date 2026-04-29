@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Create a push digest from data/paper_push_queue.json and update push status.
+Create a push digest from data/paper_push_queue.json.
 
 This is the first lightweight push executor. It does not send email/WeChat yet;
-it writes a Markdown digest and marks selected items as pushed unless --dry-run is used.
+it writes a Markdown digest without mutating queue items.
 """
 
 from __future__ import annotations
@@ -42,12 +42,12 @@ def resolve(workspace: Path, value: str) -> Path:
 
 
 def is_pending(item: dict[str, Any]) -> bool:
-    return str(item.get("status") or "pending").lower() == "pending"
+    return True
 
 
 def score_of(item: dict[str, Any]) -> int:
     try:
-        return int(item.get("score", item.get("RecommendationScore", 0)) or 0)
+        return int(item.get("Score", item.get("score", item.get("RecommendationScore", 0))) or 0)
     except Exception:
         return 0
 
@@ -69,6 +69,9 @@ def item_comment(item: dict[str, Any]) -> str:
 
 
 def item_tags(item: dict[str, Any]) -> dict[str, Any]:
+    tags = item.get("Tags")
+    if isinstance(tags, dict):
+        return tags
     tags = item.get("tags")
     if isinstance(tags, dict):
         return tags
@@ -141,20 +144,8 @@ def push_items(
     print(f"pending={len(pending)} selected={len(selected)} dryRun={dry_run} keepPending={keep_pending}")
     print(f"digest={out_md_path}")
 
-    if dry_run or keep_pending:
-        return
-
-    now = dt.datetime.now().astimezone().isoformat()
-    selected_keys = {str(item.get("key") or item.get("Key") or "") for item in selected}
-    for item in queue:
-        if not isinstance(item, dict):
-            continue
-        key = str(item.get("key") or item.get("Key") or "")
-        if key in selected_keys and is_pending(item):
-            item["status"] = "pushed"
-            item["pushed_at"] = now
-    write_json(push_queue_path, queue)
-    print(f"updated={push_queue_path}")
+    if not dry_run and not keep_pending:
+        print("queueUnchanged=true")
 
 
 def main() -> None:
