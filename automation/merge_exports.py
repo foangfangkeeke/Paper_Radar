@@ -4,7 +4,7 @@ Merge and deduplicate Web of Science plain-text exports for MiniMax screening.
 
 Default input folders, relative to project root:
   reports/inbox/     if it exists, otherwise reports/ for backward compatibility
-  data/wos_exports/
+  data/source_exports/
 
 Archive behavior:
   By default, successfully parsed txt files under reports/ are moved to
@@ -220,7 +220,7 @@ def default_input_dirs(workspace: Path) -> list[Path]:
     # If reports/inbox exists, use it as the active intake folder. Otherwise use
     # reports/ once for backward compatibility with your current folder layout.
     active_reports = inbox if inbox.exists() else reports
-    return [active_reports, workspace / "data" / "wos_exports"]
+    return [active_reports, workspace / "data" / "source_exports"]
 
 
 def main() -> None:

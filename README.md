@@ -82,7 +82,7 @@ python automation/agent.py push --count 5
 │   ├── minimax.config.json       # MiniMax API configuration
 │   └── wos.config.json           # WoS browser settings
 ├── data/
-│   ├── wos_exports/              # Downloaded WoS txt files
+│   ├── source_exports/           # Downloaded WoS txt files and Crossref fallback txt files
 │   ├── paper_base_queue.json     # All screened papers
 │   ├── paper_push_queue.json     # High-scoring papers for review
 │   └── paper-screening-cache.json # Screening results cache
@@ -125,6 +125,7 @@ python automation/agent.py push --count 5
 
 ## Output Files
 
+- **`data/source_exports/`**: Unified source export folder for WoS and Crossref fallback plain-text files
 - **`data/wos_minimax_items.json`**: Merged and deduplicated paper metadata
 - **`data/paper_base_queue.json`**: All screened papers with scores and tags
 - **`data/paper_push_queue.json`**: Papers scoring above threshold, sorted by recommendation score

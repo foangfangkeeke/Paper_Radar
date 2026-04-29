@@ -132,7 +132,7 @@ def wait_for_debugger(address: str, timeout_sec: float = 12.0) -> None:
 class WosToolConfig:
     start_url: str = DEFAULT_WOS_URL
     basic_search_url: str = DEFAULT_WOS_URL
-    download_dir: Path = Path("data/wos_exports")
+    download_dir: Path = Path("data/source_exports")
     browser_profile_dir: Path = Path("data/browser_profiles/wos")
     account: str = ""
     password: str = ""
@@ -140,6 +140,7 @@ class WosToolConfig:
     auto_launch_debug_chrome: bool = True
     debugger_address: str = "127.0.0.1:9222"
     chrome_binary: str = ""
+    headless: bool = True
 
     auto_search: bool = True
     auto_export: bool = True
@@ -173,11 +174,11 @@ class WosToolConfig:
         return cls(
             start_url=normalize_wos_url(cfg.get("startUrl")),
             basic_search_url=normalize_wos_url(cfg.get("basicSearchUrl")),
-            download_dir=resolve_workspace_path(workspace, cfg.get("downloadDir") or "data/wos_exports")
-            or workspace / "data" / "wos_exports",
+            download_dir=resolve_workspace_path(workspace, cfg.get("downloadDir") or "data/source_exports")
+            or workspace / "data" / "source_exports",
             browser_profile_dir=resolve_workspace_path(
                 workspace,
-                cfg.get("browserProfileDir") or "data/browser_profiles/wos",
+                cfg.get("browserProfileDir") or cfg.get("chromeUserDataDir") or "data/browser_profiles/wos",
             )
             or workspace / "data" / "browser_profiles" / "wos",
             account=str(cfg.get("account") or ""),
@@ -186,6 +187,7 @@ class WosToolConfig:
             auto_launch_debug_chrome=bool(cfg.get("autoLaunchDebugChrome", True)),
             debugger_address=str(cfg.get("debuggerAddress") or "127.0.0.1:9222"),
             chrome_binary=str(cfg.get("chromeBinary") or ""),
+            headless=bool(cfg.get("headless", True)),
             auto_search=bool(cfg.get("autoSearch", True)),
             auto_export=bool(cfg.get("autoExport", True)),
             open_each_keyword_in_new_tab=bool(cfg.get("openEachKeywordInNewTab", False)),
@@ -348,12 +350,15 @@ class WosBrowserTool:
                     "--no-first-run",
                     "--no-default-browser-check",
                     "--disable-notifications",
-                    "--start-maximized",
+                    "--window-size=1920,1080",
                     "about:blank",
                 ]
+                if cfg.headless:
+                    cmd.insert(-1, "--headless=new")
+                    cmd.insert(-1, "--disable-gpu")
                 subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 self.log(
-                    f"Chrome launched for attach mode | debuggerAddress={cfg.debugger_address} | "
+                    f"Chrome launched for attach mode | headless={cfg.headless} | debuggerAddress={cfg.debugger_address} | "
                     f"profileDir={cfg.browser_profile_dir}"
                 )
                 wait_for_debugger(cfg.debugger_address, timeout_sec=15)
@@ -376,14 +381,17 @@ class WosBrowserTool:
                 self.log(f"Warning: failed to set Chrome download dir via CDP: {exc}")
 
             self.log(
-                f"WoS browser attached | downloadDir={cfg.download_dir} | "
+                f"WoS browser attached | headless={cfg.headless} | downloadDir={cfg.download_dir} | "
                 f"debuggerAddress={cfg.debugger_address}"
             )
             return driver
 
         options.add_argument(f"--user-data-dir={cfg.browser_profile_dir}")
-        options.add_argument("--start-maximized")
+        options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-notifications")
+        if cfg.headless:
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
         options.add_experimental_option(
             "prefs",
             {
@@ -398,7 +406,7 @@ class WosBrowserTool:
         self.driver = driver
 
         self.log(
-            f"WoS browser opened | downloadDir={cfg.download_dir} | "
+            f"WoS browser opened | headless={cfg.headless} | downloadDir={cfg.download_dir} | "
             f"profileDir={cfg.browser_profile_dir}"
         )
         return driver

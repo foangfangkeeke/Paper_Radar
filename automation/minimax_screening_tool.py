@@ -89,8 +89,17 @@ def paper_key_from_parts(title: str, doi: str = "") -> str:
     doi = clean_text(doi).lower()
     if doi:
         return "doi:" + doi
+    return title_key_from_title(title)
+
+
+def title_key_from_title(title: str) -> str:
     normalized_title = re.sub(r"[^a-z0-9]+", " ", clean_text(title).lower()).strip()
-    return "title:" + normalized_title
+    return "title:" + normalized_title if normalized_title else ""
+
+
+def doi_key_from_doi(doi: str) -> str:
+    doi = clean_text(doi).lower()
+    return "doi:" + doi if doi else ""
 
 
 def paper_key(paper: dict[str, Any]) -> str:
@@ -114,6 +123,46 @@ def merge_by_key(items: list[dict[str, Any]], key_names: tuple[str, ...] = ("Key
     return list(merged.values())
 
 
+def merge_by_identity(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    aliases: dict[str, str] = {}
+    for item in items:
+        identities = paper_identities(item)
+        canonical = ""
+        for identity in identities:
+            canonical = aliases.get(identity, "")
+            if canonical:
+                break
+        if not canonical:
+            canonical = identities[0] if identities else clean_text(item.get("Key") or item.get("key"))
+        if not canonical:
+            continue
+
+        existing = merged.get(canonical)
+        merged[canonical] = prefer_richer_paper(existing, item)
+        for identity in identities:
+            aliases[identity] = canonical
+    return list(merged.values())
+
+
+def paper_identities(item: dict[str, Any]) -> list[str]:
+    title = clean_text(item.get("Title") or item.get("title") or item.get("TI"))
+    doi = clean_text(item.get("DOI") or item.get("doi"))
+    explicit_key = clean_text(item.get("Key") or item.get("key"))
+    title_key = clean_text(item.get("TitleKey")) or title_key_from_title(title)
+    doi_key = clean_text(item.get("DoiKey")) or doi_key_from_doi(doi)
+    identities = [value for value in (doi_key, title_key, explicit_key) if value]
+    return list(dict.fromkeys(identities))
+
+
+def prefer_richer_paper(existing: dict[str, Any] | None, incoming: dict[str, Any]) -> dict[str, Any]:
+    if existing is None:
+        return incoming
+    existing_score = int(bool(clean_text(existing.get("DOI")) or clean_text(existing.get("DoiKey")))) + int(bool(paper_abstract(existing)))
+    incoming_score = int(bool(clean_text(incoming.get("DOI")) or clean_text(incoming.get("DoiKey")))) + int(bool(paper_abstract(incoming)))
+    return incoming if incoming_score > existing_score else existing
+
+
 # ------------------------------- paper parsing ------------------------------
 
 def normalize_paper_record(item: dict[str, Any], source: str = "input") -> dict[str, Any] | None:
@@ -131,6 +180,8 @@ def normalize_paper_record(item: dict[str, Any], source: str = "input") -> dict[
 
     return {
         "Key": key,
+        "DoiKey": clean_text(item.get("DoiKey")) or doi_key_from_doi(doi),
+        "TitleKey": clean_text(item.get("TitleKey")) or title_key_from_title(title),
         "Source": clean_text(item.get("Source") or item.get("source") or source),
         "Title": title,
         "Journal": journal,
@@ -207,6 +258,8 @@ def parse_wos_plain_text(path: Path, today: dt.date | None = None) -> list[dict[
         doi = clean_text(raw.get("DI"))
         paper = {
             "Key": paper_key_from_parts(title, doi),
+            "DoiKey": doi_key_from_doi(doi),
+            "TitleKey": title_key_from_title(title),
             "Source": f"wos_export:{path.name}",
             "Title": title,
             "Journal": journal,
@@ -575,6 +628,8 @@ def build_queue_record(paper: dict[str, Any], result: dict[str, Any], min_push_s
 
     return {
         "Key": paper["Key"],
+        "DoiKey": clean_text(paper.get("DoiKey")) or doi_key_from_doi(paper.get("DOI", "")),
+        "TitleKey": clean_text(paper.get("TitleKey")) or title_key_from_title(paper.get("Title", "")),
         "Title": paper["Title"],
         "Journal": paper["Journal"],
         "Date": paper["Date"],
@@ -617,6 +672,8 @@ def legacy_queue_record(record: dict[str, Any]) -> dict[str, Any]:
     tags = record.get("Tags", {}) if isinstance(record.get("Tags"), dict) else {}
     return {
         "Key": record["Key"],
+        "DoiKey": record.get("DoiKey", ""),
+        "TitleKey": record.get("TitleKey", ""),
         "Source": record["Source"],
         "Title": record["Title"],
         "Journal": record["Journal"],
@@ -666,6 +723,8 @@ def save_queues(
                 "papers": [
                     {
                         "Key": item["Key"],
+                        "DoiKey": item.get("DoiKey", ""),
+                        "TitleKey": item.get("TitleKey", ""),
                         "Title": item["Title"],
                         "Journal": item["Journal"],
                         "Accepted": bool(item.get("Accepted")),
@@ -731,15 +790,16 @@ def screen_papers_to_queues(
     if not isinstance(push_queue, list):
         push_queue = []
 
-    current_schema_keys = {
-        clean_text(item.get("Key"))
+    screened_identities = {
+        identity
         for item in base_queue
         if int(item.get("ScreenSchemaVersion", 0) or 0) >= SCREEN_SCHEMA_VERSION
+        for identity in paper_identities(item)
     }
-    current_schema_keys.discard("")
+    screened_identities.discard("")
 
-    deduped = merge_by_key([paper for paper in papers if paper.get("Key")])
-    to_screen = [paper for paper in deduped if clean_text(paper.get("Key")) not in current_schema_keys]
+    deduped = merge_by_identity([paper for paper in papers if paper.get("Key")])
+    to_screen = [paper for paper in deduped if not any(identity in screened_identities for identity in paper_identities(paper))]
     log(
         f"MiniMax screening start | input={len(papers)}; deduped={len(deduped)}; "
         f"toScreen={len(to_screen)}; batchSize={config.batch_size}; minPushScore={min_score}"
@@ -826,8 +886,8 @@ def parse_wos_exports_and_screen(
 
     deduped = merge_by_key(kept)
     write_json(
-        workspace_path / "data" / "paper-wos-candidates.json",
-        {"generatedAt": dt.datetime.now().astimezone().isoformat(), "source": "wos_export", "papers": deduped},
+        workspace_path / "data" / "paper-source-candidates.json",
+        {"generatedAt": dt.datetime.now().astimezone().isoformat(), "source": "source_exports", "papers": deduped},
     )
     log(f"WoS parse complete | files={len(export_files)}; imported={imported}; kept={len(kept)}; deduped={len(deduped)}")
     return screen_papers_to_queues(
