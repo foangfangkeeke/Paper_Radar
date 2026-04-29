@@ -5,3 +5,4 @@ automation/minimax.config*.json
 data/browser_profiles/
 data/
 reports/
+__pycache__

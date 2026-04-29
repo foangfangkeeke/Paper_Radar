@@ -2,18 +2,13 @@
 """Fill missing abstracts for current-run paper items.
 
 This runs after source export merge and before MiniMax screening.  It only
-touches items from the current run and uses a local DOI cache to avoid repeated
-metadata requests across runs.
+touches items from the current run and returns enriched items in memory.
 """
 
 from __future__ import annotations
 
-import argparse
-import datetime as dt
-import json
 import re
 import time
-from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
@@ -34,17 +29,6 @@ def clean_text(value: Any) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
-
-
-def read_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text(encoding="utf-8-sig"))
-
-
-def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def doi_from_item(item: dict[str, Any]) -> str:
@@ -109,33 +93,12 @@ def abstract_from_openalex(doi: str, log: LogFn) -> str:
     return clean_text(" ".join(positions[index] for index in sorted(positions)))
 
 
-def enrich_abstracts(
-    input_path: str | Path,
-    output_path: str | Path,
+def enrich_abstract_items(
+    items: list[dict[str, Any]],
     workspace: str | Path,
-    cache_path: str | Path = "data/abstract_enrichment_cache.json",
     log: LogFn = print,
 ) -> list[dict[str, Any]]:
-    workspace_path = Path(workspace).resolve()
-    input_file = Path(input_path)
-    if not input_file.is_absolute():
-        input_file = workspace_path / input_file
-    output_file = Path(output_path)
-    if not output_file.is_absolute():
-        output_file = workspace_path / output_file
-    cache_file = Path(cache_path)
-    if not cache_file.is_absolute():
-        cache_file = workspace_path / cache_file
-
-    items = read_json(input_file, [])
-    if not isinstance(items, list):
-        raise RuntimeError(f"Abstract enrichment input must be a list: {input_file}")
-    cache = read_json(cache_file, {})
-    if not isinstance(cache, dict):
-        cache = {}
-
     missing = 0
-    cache_hits = 0
     enriched = 0
     unresolved = 0
     output: list[dict[str, Any]] = []
@@ -153,22 +116,11 @@ def enrich_abstracts(
             output.append(item)
             continue
 
-        cached = cache.get(doi)
-        abstract = clean_text(cached.get("abstract") if isinstance(cached, dict) else "")
-        source = clean_text(cached.get("source") if isinstance(cached, dict) else "")
-        if abstract:
-            cache_hits += 1
-        else:
-            abstract = abstract_from_semantic_scholar(doi, log)
-            source = "semantic_scholar" if abstract else ""
-            if not abstract:
-                abstract = abstract_from_openalex(doi, log)
-                source = "openalex" if abstract else ""
-            cache[doi] = {
-                "abstract": abstract,
-                "source": source,
-                "checkedAt": dt.datetime.now().astimezone().isoformat(),
-            }
+        abstract = abstract_from_semantic_scholar(doi, log)
+        source = "semantic_scholar" if abstract else ""
+        if not abstract:
+            abstract = abstract_from_openalex(doi, log)
+            source = "openalex" if abstract else ""
 
         if abstract:
             item["AB"] = abstract
@@ -178,24 +130,8 @@ def enrich_abstracts(
             unresolved += 1
         output.append(item)
 
-    write_json(output_file, output)
-    write_json(cache_file, cache)
     log(
         f"Abstract enrichment complete | input={len(items)}; missing={missing}; "
-        f"cacheHits={cache_hits}; enriched={enriched}; unresolved={unresolved}; output={output_file}"
+        f"enriched={enriched}; unresolved={unresolved}"
     )
     return output
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Enrich missing abstracts by DOI.")
-    parser.add_argument("--workspace", default=str(Path(__file__).resolve().parents[1]))
-    parser.add_argument("--input", default="data/current_source_items.json")
-    parser.add_argument("--output", default="data/current_source_items.enriched.json")
-    parser.add_argument("--cache", default="data/abstract_enrichment_cache.json")
-    args = parser.parse_args()
-    enrich_abstracts(args.input, args.output, args.workspace, args.cache)
-
-
-if __name__ == "__main__":
-    main()
