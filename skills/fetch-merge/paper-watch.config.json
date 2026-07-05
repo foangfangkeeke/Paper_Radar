@@ -1,0 +1,40 @@
+{
+  "keywords": [
+    {
+      "name": "transport_energy_integration",
+      "query": "((electric vehicle*) OR (electric bus*) OR (battery electric bus*) OR (charging infrastructure) OR (wireless charging)) AND ((power grid) OR (smart grid) OR (demand response) OR (energy system*) OR (renewable energy)) AND ((optimization) OR (planning) OR (scheduling) OR (operation))"
+    },
+    {
+      "name": "transport_emergency_resilience",
+      "query": "((transportation resilience) OR (public transport resilience) OR (public transport disruption) OR (transit disruption) OR (service disruption) OR (emergency transportation) OR (disruption management) OR (service recovery) OR (service restoration)) AND ((public transport) OR (public transit) OR (transit) OR (bus) OR (metro) OR (rail transit) OR (multimodal transport)) AND ((optimization) OR (scheduling) OR (rescheduling) OR (planning) OR (routing) OR (dispatching) OR (network design) OR (timetabling))"
+    },
+    {
+      "name": "or_ai",
+      "query": "((learning to optimize) OR (machine learning for optimization) OR (large language model*) OR (learning-augmented optimization) OR (ML-guided optimization) OR (learning to branch) OR (learning to cut) OR (learning to heuristics)) AND ((mixed integer programming) OR (integer programming) OR (combinatorial optimization) OR (branch-and-bound) OR (branch-and-cut) OR (cutting plane) OR (Benders decomposition) OR (decomposition algorithm))"
+    },
+    {
+      "name": "ai_behavior",
+      "query": "((machine learning) OR (artificial intelligence) OR (deep learning) OR (large language model*) OR (explainable artificial intelligence) OR (interpretable machine learning)) AND ((travel behavior) OR (traveler behavior) OR (choice modeling) OR (mode choice) OR (discrete choice) OR (passenger behavior) OR (travel decision)) AND ((transportation) OR (mobility) OR (airport) OR (transit))"
+    }
+  ],
+  "topJournals": [
+    "Operations Research",
+    "Management Science",
+    "Mathematics of Operations Research",
+    "INFORMS Journal on Optimization",
+    "INFORMS Journal on Computing",
+    "Manufacturing & Service Operations Management",
+    "Mathematical Programming",
+    "Computers & Operations Research",
+    "European Journal of Operational Research",
+    "Transportation Science",
+    "Transportation Research Part A: Policy and Practice",
+    "Transportation Research Part B: Methodological",
+    "Transportation Research Part C: Emerging Technologies",
+    "Transportation Research Part D: Transport and Environment",
+    "Transportation Research Part E: Logistics and Transportation Review",
+    "Transportation Research Part F: Traffic Psychology and Behaviour",
+    "Transport Policy",
+    "Nature Energy"
+  ]
+}
