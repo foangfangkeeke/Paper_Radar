@@ -592,7 +592,7 @@ def _https_get_raw(host: str, path: str, cookies: dict,
             if content_length is not None and len(body) != int(content_length):
                 raise ConnectionError(
                     f"Incomplete HTTP body: expected {int(content_length)}, got {len(body)}")
-            if status == 200 and len(body) > 500:
+            if status == 200 and len(body) > 0:
                 return body
             if attempt % 3 == 0 and attempt > 0:
                 status_line = header_lines[0].decode(errors='replace')
@@ -898,11 +898,34 @@ def ebsco_download(doi: str, dest_path: Path, timeout: int = 120,
         client.request("Page.stopLoading", timeout=10)
 
         # === Step 6: Download PDF from captured API URL via raw socket ===
+        # EBSCO's 2026 PDF endpoint returns JSON containing a signed
+        # content.ebscohost.com/cds/retrieve URL when an intent is supplied.
+        # Older behavior returned the PDF bytes directly, so keep both paths.
         pu = _up.urlparse(content_url)
+        if "/fulltext/pdf" in pu.path and "intent=" not in pu.query:
+            sep = "&" if pu.query else ""
+            content_url = _up.urlunparse((
+                pu.scheme, pu.netloc, pu.path, pu.params,
+                pu.query + sep + "intent=view", pu.fragment))
+            pu = _up.urlparse(content_url)
+
         cookies = _get_cdp_cookies(client, content_url)
         request_path = pu.path + (f'?{pu.query}' if pu.query else '')
         pdf_body = _https_get_raw(
             pu.netloc, request_path, cookies, retries=5, referer=pdf_viewer_url)
+        if pdf_body and pdf_body[:4] != b"%PDF":
+            try:
+                payload = json.loads(pdf_body.decode("utf-8"))
+                signed_url = payload.get("url", "")
+                if signed_url:
+                    signed = _up.urlparse(signed_url)
+                    signed_path = signed.path + (f'?{signed.query}' if signed.query else '')
+                    pdf_body = _https_get_raw(
+                        signed.netloc, signed_path, {}, retries=5,
+                        referer=content_url)
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                pass
+
         if pdf_body and pdf_body[:4] == b"%PDF":
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             dest_path.write_bytes(pdf_body)
